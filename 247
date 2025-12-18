@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ================================
+#  Debian 11 XRDP + XFCE Installer
+#  Made by MrDraynoX
+# ================================
+
+# -------- Colors --------
+RED='\033[1;31m'
+GREEN='\033[1;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[1;36m'
+WHITE='\033[1;37m'
+RESET='\033[0m'
+
+# -------- Helpers --------
+log()  { echo -e "${CYAN}[INFO]${RESET} $1"; }
+ok()   { echo -e "${GREEN}[OK]${RESET}   $1"; }
+warn() { echo -e "${YELLOW}[WARN]${RESET} $1"; }
+err()  { echo -e "${RED}[ERROR]${RESET} $1"; }
+
+spinner() {
+    local pid=$1
+    local delay=0.1
+    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    while kill -0 $pid 2>/dev/null; do
+        for ((i=0;i<${#spinstr};i++)); do
+            printf "\r${YELLOW}⏳ %c${RESET}" "${spinstr:$i:1}"
+            sleep $delay
+        done
+    done
+    printf "\r"
+}
+
+# -------- Sudo Detection --------
+if command -v sudo >/dev/null 2>&1; then
+    SUDO="sudo"
+else
+    warn "sudo not found, running without sudo"
+    SUDO=""
+fi
+
+# -------- Logging Setup --------
+LOGFILE="$HOME/xrdp_xfce_install.log"
+touch "$LOGFILE"
+echo "" > "$LOGFILE"
+
+# -------- Header --------
+clear
+echo "========================================================"
+echo "   Debian 11 XRDP + XFCE Setup"
+echo "   Clean • Fast • Stable • IDX Ready"
+echo "   Made by MrDraynoX"
+echo "========================================================"
+sleep 1
+
+# -------- Functions --------
+run_step() {
+    local step_num=$1
+    local message=$2
+    local cmd=$3
+
+    log "[$step_num] $message"
+    bash -c "$cmd" >>"$LOGFILE" 2>&1 &
+    pid=$!
+    spinner $pid
+    wait $pid
+    if [ $? -eq 0 ]; then
+        ok "$message completed"
+    else
+        err "$message failed! Check $LOGFILE"
+        exit 1
+    fi
+}
+
+# -------- Steps --------
+run_step 1 "Updating system packages" "$SUDO apt update -y && $SUDO apt upgrade -y"
+run_step 2 "Installing XFCE, XRDP, DBus & Firefox" "$SUDO apt install -y xfce4 xfce4-goodies xrdp dbus-x11 firefox-esr"
+run_step 3 "Configuring XRDP session" "echo -e 'export \$(dbus-launch)\nxfce4-session' > ~/.xsession"
+run_step 4 "Fixing .xsession permissions" "$SUDO chown $(whoami):$(whoami) ~/.xsession && chmod 644 ~/.xsession"
+run_step 5 "Adding XRDP user to ssl-cert group" "$SUDO adduser xrdp ssl-cert || true"
+run_step 6 "Enabling & restarting XRDP service" "$SUDO systemctl enable xrdp && $SUDO systemctl restart xrdp"
+run_step 7 "Applying Firefox XRDP fix" "$SUDO sed -i 's|^Exec=firefox-esr.*|Exec=firefox-esr --no-sandbox --disable-seccomp|' /usr/share/applications/firefox-esr.desktop"
+
+# Final check
+log "Checking XRDP service status"
+if systemctl is-active --quiet xrdp; then
+    ok "XRDP is active and running"
+else
+    warn "XRDP may not be running"
+fi
+
+# -------- Done --------
+echo
+echo "========================================================"
+echo -e " 🎉 ${GREEN}Installation Complete!${RESET}"
+echo
+echo " ✅ XFCE Desktop Ready"
+echo " ✅ XRDP Configured"
+echo " ✅ Firefox Works Under XRDP"
+echo
+echo " 💻 Connect using Windows Remote Desktop"
+echo " 🏷️ Credit: MrDraynoX"
+echo "========================================================"
